@@ -5,6 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { z } from 'zod'
+import { EDGE_VOICES, synthesizeEdgeMp3 } from './edgeTts.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_PORT = Number(process.env.PORT || 8787)
@@ -192,6 +193,27 @@ function createApp() {
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, service: 'translate_app' })
+  })
+
+  app.post('/api/tts', async (req, res) => {
+    try {
+      const schema = z.object({
+        text: z.string().min(1).max(2000),
+        lang: z.enum(['zh', 'en', 'de', 'fr', 'ja', 'ko', 'ru']),
+      })
+      const parsed = schema.parse(req.body)
+      if (!EDGE_VOICES[parsed.lang]) {
+        return res.status(400).json({ ok: false, error: '不支持的语言' })
+      }
+      const audio = await synthesizeEdgeMp3(parsed.text, parsed.lang)
+      res.setHeader('Content-Type', 'audio/mpeg')
+      res.setHeader('Cache-Control', 'no-store')
+      res.send(audio)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[tts]', message)
+      res.status(500).json({ ok: false, error: message || '语音合成失败' })
+    }
   })
 
   app.post('/api/translate', async (req, res) => {

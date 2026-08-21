@@ -25,6 +25,9 @@ const EN_US_NAME_HINTS = [
 
 const EN_AVOID_HINTS = ['en-gb', 'british', 'uk english', 'en-au', 'australian', 'en-in', 'indian']
 
+let currentAudio: HTMLAudioElement | null = null
+let currentObjectUrl: string | null = null
+
 function normalize(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim()
 }
@@ -47,7 +50,6 @@ function scoreVoice(voice: SpeechSynthesisVoice, preferredLang: string): number 
     if (EN_AVOID_HINTS.some((h) => name.includes(h) || lang.includes(h))) score -= 80
   }
 
-  // Prefer local / default higher-quality voices when tied
   if (voice.localService) score += 10
   if (voice.default) score += 5
 
@@ -77,15 +79,59 @@ function getVoicesReady(): Promise<SpeechSynthesisVoice[]> {
       resolve(window.speechSynthesis.getVoices())
     }
     window.speechSynthesis.addEventListener('voiceschanged', done)
-    // Fallback if event never fires
     window.setTimeout(done, 500)
   })
 }
 
-export async function speakText(text: string, lang: LangCode): Promise<void> {
-  if (!text.trim()) return
-  if (typeof window === 'undefined' || !window.speechSynthesis) {
-    throw new Error('当前浏览器不支持语音合成')
+function stopAudio(): void {
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio.src = ''
+    currentAudio = null
+  }
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl)
+    currentObjectUrl = null
+  }
+}
+
+async function speakWithEdge(text: string, lang: LangCode): Promise<void> {
+  const res = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, lang }),
+  })
+
+  if (!res.ok) {
+    let message = `语音服务失败 (${res.status})`
+    try {
+      const data = await res.json()
+      if (data?.error) message = String(data.error)
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message)
+  }
+
+  const blob = await res.blob()
+  if (!blob.size) throw new Error('未收到音频数据')
+
+  stopAudio()
+  const url = URL.createObjectURL(blob)
+  currentObjectUrl = url
+  const audio = new Audio(url)
+  currentAudio = audio
+
+  await new Promise<void>((resolve, reject) => {
+    audio.onended = () => resolve()
+    audio.onerror = () => reject(new Error('音频播放失败'))
+    audio.play().catch(reject)
+  })
+}
+
+async function speakWithSystem(text: string, lang: LangCode): Promise<void> {
+  if (!window.speechSynthesis) {
+    throw new Error('当前环境不支持语音合成')
   }
 
   window.speechSynthesis.cancel()
@@ -102,10 +148,28 @@ export async function speakText(text: string, lang: LangCode): Promise<void> {
     utter.lang = matched.lang || preferredLang
   }
 
-  window.speechSynthesis.speak(utter)
+  await new Promise<void>((resolve, reject) => {
+    utter.onend = () => resolve()
+    utter.onerror = () => reject(new Error('系统朗读失败'))
+    window.speechSynthesis.speak(utter)
+  })
+}
+
+/** Prefer Edge neural TTS (e.g. en-US-JennyNeural); fall back to system voices. */
+export async function speakText(text: string, lang: LangCode): Promise<void> {
+  if (!text.trim()) return
+  stopSpeaking()
+
+  try {
+    await speakWithEdge(text, lang)
+  } catch (edgeErr) {
+    console.warn('[tts] Edge TTS unavailable, fallback to system:', edgeErr)
+    await speakWithSystem(text, lang)
+  }
 }
 
 export function stopSpeaking(): void {
+  stopAudio()
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }

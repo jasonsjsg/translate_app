@@ -12,13 +12,18 @@ export function SpeakButton({ text, lang, className = '' }: Props) {
   const [busy, setBusy] = useState(false)
 
   const onSpeak = async () => {
+    if (busy) {
+      stopSpeaking()
+      setBusy(false)
+      return
+    }
     try {
       setBusy(true)
       await speakText(text, lang)
-      window.setTimeout(() => setBusy(false), Math.min(8000, Math.max(1200, text.length * 80)))
     } catch (err) {
-      setBusy(false)
       alert(err instanceof Error ? err.message : '发音失败')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -27,8 +32,11 @@ export function SpeakButton({ text, lang, className = '' }: Props) {
       type="button"
       className={`btn-ghost ${className}`}
       onClick={onSpeak}
-      onDoubleClick={() => stopSpeaking()}
-      title="点击朗读，双击停止"
+      onDoubleClick={() => {
+        stopSpeaking()
+        setBusy(false)
+      }}
+      title="点击朗读（Edge 美式神经网络），再次点击或双击停止"
       disabled={!text.trim()}
     >
       {busy ? '朗读中…' : '🔊 发音'}
