@@ -11,10 +11,10 @@ interface Props {
 export function SpeakButton({ text, lang, className = '' }: Props) {
   const [busy, setBusy] = useState(false)
 
-  const onSpeak = () => {
+  const onSpeak = async () => {
     try {
       setBusy(true)
-      speakText(text, lang)
+      await speakText(text, lang)
       window.setTimeout(() => setBusy(false), Math.min(8000, Math.max(1200, text.length * 80)))
     } catch (err) {
       setBusy(false)

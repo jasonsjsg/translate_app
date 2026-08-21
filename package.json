@@ -2,14 +2,19 @@
   "name": "translate_app",
   "private": true,
   "version": "0.1.0",
+  "description": "多语言翻译桌面应用",
+  "author": "jasonsjsg",
   "type": "module",
+  "main": "electron/main.mjs",
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run server\" \"vite --host 127.0.0.1 --port 5173\"",
     "dev:web": "vite --host 127.0.0.1 --port 5173",
+    "dev:desktop": "concurrently -k -n web,electron -c green,magenta \"vite --host 127.0.0.1 --port 5173\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER=http://127.0.0.1:5173 electron .\"",
     "server": "node server/index.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --config.directories.output=C:/temp/translate_app_release && node scripts/copy-release.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -29,12 +34,60 @@
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.13.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.2",
-    "vite": "^4.5.3"
+    "vite": "^4.5.3",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.jasonsjsg.translateapp",
+    "productName": "TranslateApp",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "TranslateApp-Setup-${version}-${arch}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "多语言翻译",
+      "uninstallDisplayName": "多语言翻译",
+      "deleteAppDataOnUninstall": false
+    },
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ]
+  },
+  "engines": {
+    "node": ">=16.20"
   }
 }
